@@ -1,15 +1,35 @@
-# Python
+# --- Segurança e Configurações ---
+.env
+auth/
+secrets/
+
+# --- Dados do Utilizador (Entradas e Saídas) ---
+data/*.json
+data/*.txt
+*.xlsx
+*.csv
+logs/
+*.log
+
+# --- Python (Ficheiros Temporários) ---
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+env/
 venv/
 .venv/
+pip-log.txt
+pip-delete-this-directory.txt
 
-# Configurações sensíveis (IMPORTANTE)
-.env
+# --- IDEs e Editores ---
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# Saídas de compilação e relatórios
+# --- Distribuição e Build (.exe) ---
 dist/
 build/
 *.spec
-*.xlsx
