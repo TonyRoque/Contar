@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Configurações sensíveis (IMPORTANTE)
+.env
+
+# Saídas de compilação e relatórios
+dist/
+build/
+*.spec
+*.xlsx
