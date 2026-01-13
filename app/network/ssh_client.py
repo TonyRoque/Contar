@@ -1,89 +1,96 @@
 import socket
 import paramiko
 import logging
-from typing import Tuple, Optional
+from typing import Tuple
 from app.models.data_models import RadioResult
+from app.models.exceptions import (
+    DeviceOfflineError, 
+    AuthenticationError, 
+    SSHExecutionError
+)
 
-# Configuração de logging
 logger = logging.getLogger(__name__)
 
 class SSHManager:
     def __init__(self, timeout: int = 12):
         self.timeout = timeout
 
-    def check_port(self, host: str, port: int) -> bool:
-        """
-        Verifica se a porta TCP está aberta (Substitui o Ping).
-        Retorna True se conseguir conectar, False caso contrário.
-        """
+    def is_port_open(self, host: str, port: int) -> bool:
+        """Verifica se a porta TCP está aberta (substitui o ping de forma robusta)."""
         try:
-            # socket.AF_INET = IPv4, socket.SOCK_STREAM = TCP
-            with socket.create_connection((host, port), timeout=self.timeout) as sock:
+            with socket.create_connection((host, port), timeout=self.timeout):
                 return True
         except (socket.timeout, ConnectionRefusedError, OSError):
             return False
 
-    def executar_comando(self, host: str, port: int, user: str, password: str, comando: str) -> Tuple[str, str]:
-        """
-        Conecta via SSH e executa um comando.
-        Retorna uma tupla (output, erro).
-        """
-        # Primeiro, valida se o rádio está alcançável via porta TCP
-        if not self.check_port(host, port):
-            return "", "OFFLINE_PORT_CLOSED"
-
+    def _get_ssh_client(self) -> paramiko.SSHClient:
+        """Configura e retorna um cliente SSH com políticas de segurança estritas."""
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        return client
 
+    def executar_comando(self, host: str, port: int, user: str, password: str, comando: str) -> str:
+        """
+        Executa comando via SSH com tratamento de exceções customizadas.
+        Implementa proteção contra agentes de chaves e valida status de saída.
+        """
+        if not self.is_port_open(host, port):
+            raise DeviceOfflineError(f"Host {host}:{port} inacessível.")
+
+        client = self._get_ssh_client()
         try:
-            # Banner_timeout é crucial para rádios Ubiquiti sob carga
+            # look_for_keys=False evita que o script tente usar suas chaves pessoais (ex: do GitHub)
             client.connect(
                 hostname=host,
                 port=port,
                 username=user,
                 password=password,
                 timeout=self.timeout,
-                banner_timeout=15 
+                banner_timeout=15,
+                look_for_keys=False,
+                allow_agent=False
             )
 
             stdin, stdout, stderr = client.exec_command(comando)
-            # Lê o resultado e limpa espaços vazios
-            output = stdout.read().decode('utf-8').strip()
-            error = stderr.read().decode('utf-8').strip()
             
-            return output, error
+            # Garante que o comando terminou e captura o código de retorno (0 = Sucesso)
+            exit_status = stdout.channel.recv_exit_status()
+            
+            if exit_status != 0:
+                erro_msg = stderr.read().decode('utf-8').strip()
+                raise SSHExecutionError(f"Comando falhou (Code {exit_status}): {erro_msg}")
+
+            return stdout.read().decode('utf-8').strip()
 
         except paramiko.AuthenticationException:
-            return "", "AUTH_FAILED"
-        except Exception as e:
-            logger.error(f"Erro inesperado no rádio {host}: {str(e)}")
-            return "", f"SSH_ERROR: {type(e).__name__}"
+            raise AuthenticationError("Falha na autenticação (Usuário/Senha).")
+        except paramiko.SSHException as e:
+            raise SSHExecutionError(f"Erro de protocolo SSH: {str(e)}")
         finally:
             client.close()
 
-    def contar_clientes(self, host: str, port: int, user: str, password: str) -> RadioResult:
-        """
-        Método de alto nível que orquestra a contagem e retorna um RadioResult.
-        """
-        # Comando otimizado que já faz a contagem no rádio (reduz tráfego de rede)
+    def contar_clientes(self, task) -> RadioResult:
+        """Orquestra a consulta e converte exceções em um objeto RadioResult padronizado."""
         comando = "wstalist | grep -c '\"mac\"'"
         
-        output, erro = self.executar_comando(host, port, user, password, comando)
-        
-        # Lógica de decisão para o resultado
-        if erro == "OFFLINE_PORT_CLOSED":
-            return RadioResult(ip=host, status="Offline", clientes=0, observacao="Porta 22 fechada")
-        elif erro == "AUTH_FAILED":
-            return RadioResult(ip=host, status="Erro Auth", clientes=0, observacao="Credenciais incorretas")
-        elif "SSH_ERROR" in erro:
-            return RadioResult(ip=host, status="Erro SSH", clientes=0, observacao=erro)
-        
-        # Se chegou aqui, temos um output numérico
-        qtd_clientes = int(output) if output.isdigit() else 0
-        return RadioResult(
-            ip=host, 
-            status="Online", 
-            clientes=qtd_clientes, 
-            observacao="Sucesso"
-        )
-        
+        try:
+            output = self.executar_comando(task.ip, task.port, task.username, task.password, comando)
+            qtd = int(output) if output.isdigit() else 0
+            
+            return RadioResult(
+                ip=task.ip,
+                torre=task.torre,
+                status="Online",
+                clientes=qtd,
+                observacao="Sucesso"
+            )
+
+        except DeviceOfflineError:
+            return RadioResult(task.ip, task.torre, "Offline", 0, "Porta fechada/Timeout")
+        except AuthenticationError:
+            return RadioResult(task.ip, task.torre, "Erro Auth", 0, "Senha incorreta")
+        except SSHExecutionError as e:
+            return RadioResult(task.ip, task.torre, "Erro SSH", 0, str(e))
+        except Exception as e:
+            logger.error(f"Erro crítico em {task.ip}: {e}")
+            return RadioResult(task.ip, task.torre, "Erro Crítico", 0, "Falha inesperada")
