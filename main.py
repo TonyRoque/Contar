@@ -1,19 +1,18 @@
 import os
 import sys
-import json
 import logging
 import ipaddress
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-# Importações internas do seu projeto
+# Importações internas
 from app.utils.config_loader import ConfigLoader
 from app.core.engine import ProcessamentoEngine
 from app.utils.excel_generator import ExcelGenerator
 from app.models.data_models import RadioTask
 
 # =============================================================================
-# CONFIGURAÇÃO DE LOGGING (Padrão Sênior)
+# CONFIGURAÇÃO DE LOGGING
 # =============================================================================
 os.makedirs('logs', exist_ok=True)
 log_handler = RotatingFileHandler('logs/app.log', maxBytes=1024*1024, backupCount=5)
@@ -25,37 +24,44 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # =============================================================================
-# FUNÇÕES AUXILIARES DE VALIDAÇÃO
+# MOTOR DE DESCOBERTA E NORMALIZAÇÃO (Sênior)
 # =============================================================================
 
+def extrair_tarefas_recursivo(dados, contexto_pai="Desconhecida"):
+    """
+    Percorre o JSON recursivamente em busca de listas de rádios.
+    Transforma qualquer estrutura aninhada em uma lista plana para o motor.
+    """
+    tarefas_encontradas = []
+
+    if isinstance(dados, dict):
+        for chave, valor in dados.items():
+            # Se encontrar uma lista, verifica se o primeiro item parece um rádio
+            if isinstance(valor, list):
+                for item in valor:
+                    if isinstance(item, dict) and "ip" in item:
+                        tarefas_encontradas.append({
+                            "ip": item.get("ip"),
+                            "torre": chave # O nome da chave atual vira a Torre
+                        })
+            else:
+                # Continua mergulhando se for outro dicionário
+                tarefas_encontradas.extend(extrair_tarefas_recursivo(valor, chave))
+                
+    return tarefas_encontradas
+
 def validar_e_normalizar_ip(ip_str: str) -> str | None:
-    """Limpa, valida e normaliza endereços IPv4 ou IPv6."""
-    if not ip_str or not isinstance(ip_str, str):
-        return None
-    
-    ip_limpo = ip_str.strip()
-    # Tratamento para IPv6 [::1]:porta ou IPv4 1.1.1.1:22
-    if '[' in ip_limpo and ']' in ip_limpo:
-        ip_limpo = ip_limpo.split(']')[0].replace('[', '')
-    elif ':' in ip_limpo and ip_limpo.count(':') == 1:
-        ip_limpo = ip_limpo.split(':')[0]
-    
+    if not ip_str or not isinstance(ip_str, str): return None
+    ip_limpo = ip_str.strip().split(':')[0].replace('[', '').replace(']', '')
     try:
         return str(ipaddress.ip_address(ip_limpo))
     except ValueError:
         return None
 
 def selecionar_arquivo_json(diretorio_data: str) -> str | None:
-    """Lista arquivos .json e gerencia a escolha do usuário."""
-    if not os.path.exists(diretorio_data):
-        logger.error(f"Pasta de dados não encontrada: {diretorio_data}")
-        return None
-
+    if not os.path.exists(diretorio_data): return None
     arquivos = sorted([f for f in os.listdir(diretorio_data) if f.endswith('.json')])
-    
-    if not arquivos:
-        logger.error(f"Nenhum arquivo .json encontrado em: {diretorio_data}")
-        return None
+    if not arquivos: return None
 
     print("\n📂 SELEÇÃO DE INVENTÁRIO:")
     for i, arquivo in enumerate(arquivos, start=1):
@@ -63,114 +69,77 @@ def selecionar_arquivo_json(diretorio_data: str) -> str | None:
     
     try:
         escolha = int(input(f"\n👉 Escolha o arquivo (1-{len(arquivos)}): ").strip())
-        if 1 <= escolha <= len(arquivos):
-            return os.path.join(diretorio_data, arquivos[escolha - 1])
-    except ValueError:
-        pass
-    
-    logger.error("Seleção inválida ou cancelada.")
-    return None
-
-def obter_porta_ssh(porta_json: any) -> int:
-    """Define a porta SSH baseada em cascata de prioridades."""
-    entrada = input(f"\n👉 Porta SSH (Sugerida: {porta_json} | ENTER para confirmar): ").strip()
-    
-    if entrada.isdigit():
-        p = int(entrada)
-        if 1 <= p <= 65535: return p
-    
-    # Fallback para JSON ou padrão 22
-    try:
-        p_json = int(porta_json)
-        return p_json if 1 <= p_json <= 65535 else 22
-    except (ValueError, TypeError):
-        return 22
+        return os.path.join(diretorio_data, arquivos[escolha - 1]) if 1 <= escolha <= len(arquivos) else None
+    except ValueError: return None
 
 # =============================================================================
-# FLUXO PRINCIPAL (CORE)
+# FLUXO PRINCIPAL
 # =============================================================================
 
 def iniciar():
-    """Função mestre que orquestra o carregamento, processamento e relatório."""
     diretorio_raiz = os.getcwd()
-    diretorio_data = os.path.join(diretorio_raiz, "data")
     loader = ConfigLoader(diretorio_raiz)
     
-    print("\n" + "="*60)
-    print("🚀 SISTEMA CONTAR - MONITOR DE PTMP V1.0.0")
-    print("="*60)
+    print("\n" + "="*60 + "\n🚀 SISTEMA CONTAR - CORE V0.8.5\n" + "="*60)
 
-    # 1. Seleção do Arquivo
-    caminho_json = selecionar_arquivo_json(diretorio_data)
-    if not caminho_json: return
+    caminho_json = selecionar_arquivo_json(os.path.join(diretorio_raiz, "data"))
+    if not caminho_json:
+        logger.error("Arquivo não selecionado ou inexistente.")
+        return
 
     try:
-        # 2. Carregamento e Validação de Estrutura
         json_data = loader.load_json_data(caminho_json)
-        if not isinstance(json_data, dict) or "LISTA_RADIOS" not in json_data:
-            logger.error("Estrutura do JSON inválida. Chave 'LISTA_RADIOS' é obrigatória.")
-            return
-
-        # 3. Credenciais e Metadados
+        
+        # 1. Normalização dos Dados (Mergulho Inteligente)
+        print("🔍 Analisando estrutura do arquivo...")
+        dados_brutos = extrair_tarefas_recursivo(json_data)
+        
+        # 2. Carregamento de Credenciais (Baseado no Metadados do JSON)
         meta = json_data.get("METADADOS", {})
         regiao = meta.get("regiao", "PADRAO").upper()
         user, password = loader.get_credentials(regiao)
         
         if not user or not password:
-            logger.error(f"Credenciais para '{regiao}' não encontradas no arquivo .env")
+            logger.error(f"Credenciais '{regiao}' ausentes no .env")
             return
 
-        # 4. Configuração de Rede
-        porta_final = obter_porta_ssh(meta.get("porta_padrao"))
-        logger.info(f"Configurado: Região={regiao} | Porta={porta_final}")
+        porta_json = meta.get("porta_padrao", 22)
+        entrada_porta = input(f"\n👉 Porta SSH (Sugerida: {porta_json} | Enter para manter): ").strip()
+        porta_final = int(entrada_porta) if entrada_porta.isdigit() else int(porta_json)
 
-        # 5. Filtragem e Mapeamento de Tarefas
+        # 3. Mapeamento para o Modelo Interno
         lista_tarefas = []
-        for radio in json_data["LISTA_RADIOS"]:
-            ip_validado = validar_e_normalizar_ip(radio.get("ip"))
-            if ip_validado:
+        for item in dados_brutos:
+            ip_ok = validar_e_normalizar_ip(item["ip"])
+            if ip_ok:
                 lista_tarefas.append(RadioTask(
-                    ip=ip_validado,
-                    torre=radio.get("torre", "Desconhecida"),
-                    username=user,
-                    password=password,
-                    port=porta_final
+                    ip=ip_ok, torre=item["torre"],
+                    username=user, password=password, port=porta_final
                 ))
-        
+
         total = len(lista_tarefas)
         if total == 0:
-            logger.error("Nenhum rádio com IP válido para processar.")
+            logger.error("Nenhum rádio válido encontrado na estrutura.")
             return
 
-        # 6. Execução do Motor de Processamento
-        print(f"\n⚡ Iniciando varredura em {total} dispositivos...")
-        
-        def atualizar_progresso(n):
-            prog = min((n / total) * 100, 100)
-            print(f"   [Progresso: {n}/{total} ({prog:.1f}%)]", end='\r', flush=True)
+        # 4. Execução do Motor
+        def callback(n):
+            p = (n / total) * 100
+            print(f"   [Progresso: {n}/{total} ({p:.1f}%)]", end='\r', flush=True)
 
         engine = ProcessamentoEngine(max_workers=25)
-        resultados = engine.processar_radios(lista_tarefas, callback_progresso=atualizar_progresso)
-        print(" " * 60, end='\r') # Limpa linha de progresso
+        resultados = engine.processar_radios(lista_tarefas, callback_progresso=callback)
+        print(" " * 60, end='\r')
 
-        # 7. Relatório Final
-        nome_relatorio = f"Contagem_{regiao}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-        ExcelGenerator.gerar_relatorio(resultados, nome_relatorio)
+        # 5. Relatório
+        nome_excel = f"Relatorio_{regiao}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        ExcelGenerator.gerar_relatorio(resultados, nome_excel)
         
-        # Resumo Estatístico
-        on = sum(1 for r in resultados if r.status == 'Online')
-        print("\n" + "="*60)
-        print(f"✅ CONCLUÍDO COM SUCESSO")
-        print(f"   🟢 Online: {on} | 🔴 Offline: {total - on}")
-        print(f"   📄 Arquivo: {nome_relatorio}")
-        print("="*60 + "\n")
+        on = sum(1 for r in resultados if r.status == "Online")
+        print(f"\n✅ CONCLUÍDO! Online: {on}/{total} | Relatório: {nome_excel}\n")
 
-    except json.JSONDecodeError:
-        logger.error(f"Erro de sintaxe no arquivo JSON: {caminho_json}")
-    except KeyboardInterrupt:
-        print("\n⚠️ Operação interrompida pelo usuário.")
     except Exception as e:
-        logger.critical(f"Falha inesperada: {e}", exc_info=True)
+        logger.critical(f"Erro fatal: {e}", exc_info=True)
 
 if __name__ == "__main__":
     iniciar()
