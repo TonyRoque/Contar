@@ -18,32 +18,27 @@ class ProcessamentoEngine:
     ) -> List[RadioResult]:
         """
         Orquestra a execução paralela das consultas nos rádios.
-        
-        :param tarefas: Lista de objetos RadioTask.
-        :param callback_progresso: Função opcional para atualizar a UI (progresso).
-        :return: Lista de objetos RadioResult.
         """
         resultados = []
         total = len(tarefas)
         concluidos = 0
 
-        logger.info(f"Iniciando processamento de {total} rádios com {self.max_workers} threads.")
+        # Log que aparecerá na sua UI
+        logger.info(f"🚀 Motor iniciado: Processando {total} rádios com {self.max_workers} canais.")
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # Mapeia cada tarefa para o método contar_clientes do ssh_manager
             future_to_radio = {
                 executor.submit(self.ssh_manager.contar_clientes, task): task 
                 for task in tarefas
             }
 
             for future in as_completed(future_to_radio):
+                task = future_to_radio[future]
                 try:
                     resultado = future.result()
                     resultados.append(resultado)
                 except Exception as e:
-                    # Este bloco captura erros catastróficos que o SSHManager não pegou
-                    task = future_to_radio[future]
-                    logger.error(f"Erro fatal ao processar rádio {task.ip}: {e}")
+                    logger.error(f"❌ Erro fatal no rádio {task.ip}: {e}")
                     resultados.append(RadioResult(
                         ip=task.ip, 
                         torre=task.torre, 
@@ -53,7 +48,10 @@ class ProcessamentoEngine:
                 finally:
                     concluidos += 1
                     if callback_progresso:
-                        # Envia o progresso atual (ex: 1, 2, 3...) para quem chamou
+                        # O .after(0, ...) no CustomTkinter lidará com isso, 
+                        # mas enviamos o valor bruto aqui.
                         callback_progresso(concluidos)
 
+        logger.info(f"✅ Processamento paralelo finalizado.")
         return resultados
+        

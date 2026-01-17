@@ -1,0 +1,36 @@
+📝 Patch Notes: Evolução do Sistema Contar
+v0.1.0 – Legacy Base (O Início)
+
+    Status: Script monolítico com imports fixos.
+
+    Problemas resolvidos: Identificação básica de dependências ausentes (dotenv).
+
+    Limitação: Caminhos de arquivos "hardcoded" (travados no código) e falta de modularidade.
+
+v0.5.0 – Modularização e Ambiente
+
+    Refatoração Estrutural: Divisão do código em pastas (app/core, app/utils, app/models).
+
+    Correção de Pathing: Implementação de arquivos __init__.py para reconhecimento de pacotes Python.
+
+    Segurança: Implementação do ConfigLoader para separar credenciais sensíveis em arquivos .env.
+
+    Logs Sênior: Introdução do RotatingFileHandler para evitar que arquivos de log cresçam infinitamente.
+
+v0.8.4 – Interatividade e UX
+
+    Seleção Dinâmica: Substituição do arquivo fixo por uma interface de terminal que lista arquivos .json na pasta /data/.
+
+    Validação de Input: Proteção contra erros de digitação do usuário (letras onde deveriam ser números).
+
+    Tratamento de IP: Normalização de strings para aceitar formatos como [IP]:Porta ou IP:Porta, extraindo apenas o endereço válido para a biblioteca de conexão.
+
+v0.8.5 – (Arquitetura Flexível)
+
+    Mergulho Recursivo (Recursion Logic): Implementação de um motor que varre o JSON em qualquer profundidade. O script deixou de depender de uma estrutura fixa (ex: DADOS > TORRE) e passou a buscar o conteúdo (IPs) onde quer que estejam.
+
+    Herança de Contexto: O nome da chave superior no JSON (ex: nome da torre) agora é automaticamente herdado pelo rádio, simplificando o preenchimento do Excel.
+
+    Motor de Processamento (Engine): Otimização do ThreadPoolExecutor para lidar com múltiplas conexões simultâneas (até 25 rádios ao mesmo tempo).
+
+    Relatório Estável: Garantia de que, independentemente da estrutura do JSON de entrada, o Excel de saída mantém sempre as mesmas colunas e ordem, permitindo auditorias constantes.
