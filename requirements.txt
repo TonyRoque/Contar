@@ -1,4 +1,15 @@
-python-dotenv
-paramiko
-pandas
-openpyxl
+# Interface Web
+streamlit==1.31.0
+
+# Protocolos de Rede e SSH
+netmiko==4.3.0
+paramiko==3.4.0
+
+# Variáveis de Ambiente (.env)
+python-dotenv==1.0.1
+
+# Manipulação de Dados (essencial para o Streamlit mostrar tabelas)
+pandas==2.2.0
+
+# Utilitários
+ipaddress

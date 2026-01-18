@@ -1,93 +1,52 @@
- # --- Segurança e Configurações ---
-
+# --- Segurança e Configurações Sensíveis ---
+# Nunca suba senhas ou chaves para o repositório
 .env
-
 auth/
-
 secrets/
-
 *.key
-
 *.pem
 
-
-# --- Dados do Utilizador (Entradas e Saídas) ---
-
+# --- Dados do Usuário (Entradas e Saídas) ---
+# Ignora arquivos de dados, mantendo apenas a estrutura das pastas
 data/*.json
-
 data/*.txt
-
 *.xlsx
-
 *.csv
-
 logs/
-
 *.log
 
+# --- Streamlit ---
+# Ignora configurações locais, mas permite o arquivo de tema (config.toml) se necessário
+.streamlit/
+!.streamlit/config.toml
 
-# --- Python (Ficheiros Temporários) ---
-
+# --- Python (Ficheiros Temporários e Ambientes) ---
 __pycache__/
-
 *.py[cod]
-
 *$py.class
-
 *.so
-
 .Python
 
+# Ignora qualquer variação de ambiente virtual (incluindo venv_novo)
+venv*/
+.venv*/
 env/
-
-venv/
-
-.venv/
-
 pip-log.txt
-
 pip-delete-this-directory.txt
 
-
-# --- Testes e Cobertura ---
-
-.pytest_cache/
-
-.coverage
-
-htmlcov/
-
-.tox/
-
-*.cover
-
-
-# --- IDEs e Editores ---
-
+# --- IDEs e Editores de Texto ---
 .vscode/
-
 .idea/
-
 *.swp
-
 *.swo
-
 *~
-
 *.bak
 
-
-# --- Distribuição e Build (.exe) ---
-
-dist/
-
-build/
-
-*.spec
-
-
 # --- Sistema Operacional ---
-
 .DS_Store
+Thumbs.db
 
-Thumbs.db 
+# --- Distribuição e Build (Caso gere executáveis) ---
+dist/
+build/
+*.spec

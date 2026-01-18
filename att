@@ -34,3 +34,48 @@ v0.8.5 – (Arquitetura Flexível)
     Motor de Processamento (Engine): Otimização do ThreadPoolExecutor para lidar com múltiplas conexões simultâneas (até 25 rádios ao mesmo tempo).
 
     Relatório Estável: Garantia de que, independentemente da estrutura do JSON de entrada, o Excel de saída mantém sempre as mesmas colunas e ordem, permitindo auditorias constantes.
+    
+    
+**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------**********---------------------------
+
+    
+    **17/01/2026** -- Sistema Contar - v0.9
+    
+1. Visão Geral da Versão
+
+A v0.9 representa a transição definitiva de um script técnico de automação para um Software Desktop Profissional. Focamos em modularidade, experiência do usuário (UX) e resiliência de dados.
+2. Implementações Técnicas (Back-end)
+
+    Arquitetura Modular: Separamos a lógica em camadas (core, ui, utils, models), permitindo manutenção independente de cada parte.
+
+    Motor de Descoberta Recursivo: Implementamos um algoritmo que varre o JSON em profundidade infinita. O sistema agora encontra rádios e nomes de torres independentemente de quão aninhado o arquivo esteja.
+
+    Centralização de Inteligência (helpers.py): Criamos um núcleo de funções compartilhadas para validação de IP e extração de dados, garantindo que a CLI e a GUI funcionem de forma idêntica.
+
+    Robustez no ConfigLoader: Melhoramos a detecção do arquivo .env para suportar diferentes diretórios de execução e garantimos que credenciais regionais tenham prioridade sobre as globais.
+
+3. Interface Gráfica (Front-end)
+
+    UI Moderna (CustomTkinter): Implementação de uma janela com suporte a Dark Mode e componentes visuais arredondados.
+
+    Console de Log Integrado: Criamos um "Handler" de log personalizado que desvia as mensagens do terminal diretamente para uma caixa de texto na janela do app.
+
+    Gerenciamento de Threads: O processamento SSH foi isolado em uma thread de segundo plano, impedindo que a interface trave ou fique "branca" durante a varredura da rede.
+
+    Feedback Visual: Adição de barra de progresso dinâmica e janelas de diálogo (pop-ups) para alertas de erro e confirmação de sucesso.
+
+4. Preparação para o Ambiente Real
+
+    Normalização de IPs: O sistema agora limpa automaticamente colchetes, espaços e portas residuais dos endereços IP antes de tentar a conexão.
+
+    Gestão de VPN: Mapeamos os protocolos necessários para o acesso remoto via Linux (L2TP/IPsec), garantindo o túnel de dados necessário para o funcionamento do software.
+
+📌 Pendências para a Próxima Semana (Rumo à v1.0)
+
+    [ ] Teste de Conectividade: Validar a resposta dos rádios M5 e AC via VPN.
+
+    [ ] Ajuste de Comandos SSH: Confirmar se o comando de contagem de clientes precisa de variações dependendo da versão do firmware encontrada.
+
+    [ ] Geração de Executável: Empacotar o projeto usando PyInstaller para distribuição simplificada.
+
+    [ ] Tratamento de Exceções de Rede: Refinar os timeouts de conexão para redes de alta latência.
